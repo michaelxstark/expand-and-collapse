@@ -38,7 +38,7 @@ def choose_oct():
 #calculate file lengths for sleep times
 def calculate_file_length(file_num, folder, abbr):
     # Updated path to include audio folder
-    y, sr = librosa.load(f'static/audio/{folder}/{folder} Oct NORM/{file_num} U {abbr} norm.mp3', sr=None)
+    y, sr = librosa.load(f'static/audio/{folder}/{folder} Oct norm/{file_num} U {abbr} norm.mp3', sr=None)
     length = len(y) / sr
     return length
 
