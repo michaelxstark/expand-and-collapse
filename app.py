@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, send_from_directory
 import threading
+import os
 import random
 import time
 import queue
@@ -150,4 +151,5 @@ if __name__ == '__main__':
     #time.sleep(20)
     thread_ord.start()
     thread_krebs.start()
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))  # Use Render's port, fallback to 5000 locally
+    app.run(host='0.0.0.0', port=port)
