@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Expand and Collapse</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.cdnfonts.com/css/din-alternate" rel="stylesheet">
+    <style>
+
+
+        @import url('https://fonts.cdnfonts.com/css/din-alternate');
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'DIN Alternate', sans-serif;
+            background-color: #fefdfb;
+            color: rgba(0, 10, 10, 1.0);
+        }
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+
+        }
+        .title {
+          margin-top: 7.5%;
+            text-align: center;
+            margin-bottom: 10%;
+            color: rgba(0, 10, 10, 1.0);
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 960px; /* Increased height to accommodate both fields */
+            margin: 0 auto;
+            margin-bottom: 1%;
+            background-color: #fefdfb;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+
+        }
+
+        #visualizer {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .start-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.75);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            cursor: pointer;
+        }
+
+        .start-button {
+            padding: 15px 30px;
+            background-color: rgba(10, 0, 1, 1.0);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        .start-button:hover {
+            background-color: #4b4640;
+            transform: scale(1.05);
+        }
+        /* Server timer styles */
+        .server-timer {
+            text-align: center;
+            margin-bottom: 20px;
+            margin-top: 7.5%;
+            padding: 12px;
+            background-color: #fefdfb;
+            /*border-radius: 8px; */
+            /*box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); */
+        }
+        .timer-label {
+            font-size: 0.9em;
+            color: #8a8a8a;
+            margin-bottom: 4px;
+        }
+        .timer-value {
+            font-family: 'DIN Alternate', monospace;
+            font-size: 1.4em;
+            color: #f0f0f0;
+            letter-spacing: 1px;
+        }
+        .timer-value span {
+            display: inline-block;
+            background-color: #3a3a3a;
+            padding: 2px 6px;
+            margin: 0 2px;
+            border-radius: 4px;
+            min-width: 30px;
+        }
+
+        .credits{
+          text-align: center;
+        }
+
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Expand and Collapse</h1>
+
+
+        <div class="canvas-container">
+            <canvas id="visualizer"></canvas>
+            <div id="start-overlay" class="start-overlay">
+                <button class="start-button">Click to Start Audio</button>
+            </div>
+        </div>
+
+
+        <!-- Server timer component -->
+        <div class="server-timer">
+            <div class="timer-label">Composition Running Time</div>
+            <div id="server-timer" class="timer-value">
+                <span id="days">00</span>:<span id="hours">00</span>:<span id="minutes">00</span>:<span id="seconds">00</span>
+            </div>
+        </div>
+
+        <div class="credits">
+        Composed by <a href="https://www.lukaslauermann.net" target="_blank" style="color: rgba(0, 10, 10, 1.0); text-decoration: none;">Lukas Lauermann</a>,
+        Software developed by <a href="https://michaelxstark.github.io/home/" target="_blank" style="color: rgba(0, 10, 10, 1.0); text-decoration: none;">Michael Stark</a>
+        </div>
+
+
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('visualizer');
+        const ctx = canvas.getContext('2d');
+        let canvasWidth, canvasHeight;
+
+        // Audio state
+        let audioStarted = false;
+        const startOverlay = document.getElementById('start-overlay');
+
+        // Voice tracking
+        const activeVoices = {
+            ord: [],
+            krebs: []
+        };
+
+        // Field positions and dimensions
+        let fieldWidth, fieldHeight;
+        let rightFieldX, rightFieldY;
+        let leftFieldX, leftFieldY;
+
+        // File parts and lengths tracking
+        const currentFiles = {
+            ord: { part: null, length: null },
+            krebs: { part: null, length: null }
+        };
+
+        // Colors for each side
+        const colors = {
+            ord: {
+                primary: '#fdf9f3',
+                secondary: '#fdf9f3',
+                highlight: '#fdf9f3'
+            },
+            krebs: {
+                primary: '#D43905',
+                secondary: '#D43905',
+                highlight: '#D43905'
+            }
+        };
+
+        // Static bar properties
+        const bars = {
+            ord: [],
+            krebs: []
+        };
+
+        // Server timer variables
+        let serverStartTime = null;
+        let timerInterval = null;
+
+        // Function to fetch server start time
+        async function fetchServerStartTime() {
+            try {
+                const response = await fetch('/server-start-time');
+                const data = await response.json();
+                serverStartTime = new Date(data.start_time);
+
+                // Start the timer
+                startServerTimer();
+                return serverStartTime;
+            } catch (error) {
+                // If we can't get the start time, use current time as fallback
+                serverStartTime = new Date();
+                startServerTimer();
+                return serverStartTime;
+            }
+        }
+
+        // Function to update the timer display
+        function updateTimerDisplay() {
+            if (!serverStartTime) return;
+
+            const now = new Date();
+            const diff = now - serverStartTime;
+
+            // Convert milliseconds to days, hours, minutes, seconds
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            // Update the display
+            document.getElementById('days').textContent = days.toString().padStart(2, '0');
+            document.getElementById('hours').textContent = hours.toString().padStart(2, '0');
+            document.getElementById('minutes').textContent = minutes.toString().padStart(2, '0');
+            document.getElementById('seconds').textContent = seconds.toString().padStart(2, '0');
+        }
+
+        // Function to start the timer
+        function startServerTimer() {
+            // Clear any existing interval
+            if (timerInterval) clearInterval(timerInterval);
+
+            // Update immediately
+            updateTimerDisplay();
+
+            // Then update every second
+            timerInterval = setInterval(updateTimerDisplay, 1000);
+        }
+
+        // Function to get file number from path
+        function getFileNumberFromPath(path) {
+            if (!path) return null;
+
+            // Try different regex patterns to extract the file number
+            const patterns = [
+                /\/(\d+)\s/,      // Matches "/12 " format
+                /\\(\d+)\s/,      // Matches "\12 " format
+                /[/\\](\d+)[UM]/, // Matches "/12U" or "\12M" format
+                /\b(\d+)\s[UMO]/  // Matches "12 U" format
+            ];
+
+            for (const pattern of patterns) {
+                const matches = path.match(pattern);
+                if (matches && matches[1]) {
+                    return matches[1];
+                }
+            }
+
+            return null;
+        }
+
+        function calculateFieldDimensions() {
+            // Calculate field dimensions - make fields square
+            fieldWidth = canvasWidth * 0.5;  // 45% of canvas width
+            fieldHeight = fieldWidth;  // Square dimensions
+
+            // Position the right field (ord) in the upper right
+            rightFieldX = canvasWidth - fieldWidth;
+            rightFieldY = 0;
+
+            // Position the left field (krebs) so its upper right corner
+            // aligns with the lower left corner of the right field
+            leftFieldX = rightFieldX - fieldWidth;
+            leftFieldY = rightFieldY + fieldHeight;
+        }
+
+        function resizeCanvas() {
+            const container = document.querySelector('.canvas-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            canvasWidth = canvas.width;
+            canvasHeight = canvas.height;
+
+            // Calculate field dimensions whenever canvas is resized
+            calculateFieldDimensions();
+        }
+
+        // File lengths loading
+        async function fetchFileLengths() {
+            try {
+                const response = await fetch('/file-lengths');
+                const fileLengths = await response.json();
+                return fileLengths;
+            } catch (error) {
+                // Return a default mapping with some reasonable values
+                const defaultLengths = {};
+                for (let i = 1; i <= 16; i++) {
+                    defaultLengths[i.toString()] = 5 + Math.random() * 5; // Random lengths between 5-10 seconds
+                }
+                return defaultLengths;
+            }
+        }
+
+        // Create bars based on file lengths
+        function createStaticBars(type, voices, fileLength) {
+            // Clear existing bars
+            bars[type] = [];
+
+            if (!voices || voices.length === 0) return;
+
+            // Calculate bar properties
+            const barWidth = Math.min(30, fieldWidth / (voices.length || 1) / 2);
+            const maxBarHeight = fieldHeight * 0.8;
+
+            // Get the file number from the first voice path to determine which file is playing
+            const fileNumber = getFileNumberFromPath(voices[0]);
+
+            // Use the actual file length to calculate bar height if available
+            let normalizedHeight;
+            if (fileNumber && fileLengthsCache && fileLengthsCache[fileNumber]) {
+                // Map file length to bar height - use a reasonable range
+                // Assuming most files are between 3-15 seconds
+                const minLength = 15;  // minimum expected file length in seconds
+                const maxLength = 45; // maximum expected file length in seconds
+                const lengthRange = maxLength - minLength;
+
+                // Get the actual file length
+                const actualLength = fileLengthsCache[fileNumber];
+
+                // Normalize the length to a percentage of the max height
+                // Clamp the value between 0.2 and 1.0 of max height to ensure visibility
+                const heightPercentage = Math.min(1.0, Math.max(0.2, (actualLength - minLength) / lengthRange));
+                normalizedHeight = heightPercentage * maxBarHeight;
+            } else {
+                // Fallback if file length is not available
+                normalizedHeight = maxBarHeight * 0.5; // Default to 50% height
+            }
+
+            // Create bars for each voice based on field position
+            for (let i = 0; i < voices.length; i++) {
+                if (type === 'ord') {
+                    // Right field - bars pointing up
+                    const centerX = rightFieldX + fieldWidth / 2;
+                    bars[type].push({
+                        height: normalizedHeight,
+                        width: barWidth,
+                        x: centerX - (voices.length * barWidth / 2) + (i * barWidth * 1.5),
+                        y: rightFieldY + fieldHeight, // Bottom of the field
+                        direction: 'up'
+                    });
+                } else {
+                    // Left field - bars pointing down
+                    const centerX = leftFieldX + fieldWidth / 2;
+                    bars[type].push({
+                        height: normalizedHeight,
+                        width: barWidth,
+                        x: centerX - (voices.length * barWidth / 2) + (i * barWidth * 1.5),
+                        y: leftFieldY, // Top of the field
+                        direction: 'down'
+                    });
+                }
+            }
+
+            // Redraw the bars
+            drawBars();
+        }
+
+        function drawBars() {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+            // Draw right field (ord)
+            drawField('ord', rightFieldX, rightFieldY, fieldWidth, fieldHeight);
+
+            // Draw left field (krebs)
+            drawField('krebs', leftFieldX, leftFieldY, fieldWidth, fieldHeight);
+
+            // Draw a connecting line between the two fields
+            ctx.beginPath();
+            ctx.moveTo(rightFieldX, rightFieldY + fieldHeight); // Lower left of right field
+            ctx.lineTo(leftFieldX + fieldWidth, leftFieldY);    // Upper right of left field
+            ctx.strokeStyle = '#ffffff50';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw bars for each field
+            ['ord', 'krebs'].forEach(type => {
+                bars[type].forEach(bar => {
+                    // Draw bar based on direction
+                    const gradient = ctx.createLinearGradient(
+                        bar.x,
+                        bar.direction === 'up' ? bar.y : bar.y - bar.height,
+                        bar.x,
+                        bar.direction === 'up' ? bar.y - bar.height : bar.y
+                    );
+
+                    gradient.addColorStop(0, colors[type].primary);
+                    gradient.addColorStop(1, colors[type].highlight);
+
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+
+                    if (bar.direction === 'up') {
+                        // Upward bars (ord)
+                        ctx.roundRect(
+                            bar.x - bar.width / 2,
+                            bar.y - bar.height,
+                            bar.width,
+                            bar.height,
+                            [4, 4, 0, 0]
+                        );
+                    } else {
+                        // Downward bars (krebs)
+                        ctx.roundRect(
+                            bar.x - bar.width / 2,
+                            bar.y,
+                            bar.width,
+                            bar.height,
+                            [0, 0, 4, 4]
+                        );
+                    }
+
+                    ctx.fill();
+                });
+            });
+        }
+
+        function drawField(type, x, y, width, height) {
+            // Draw field background
+            const gradient = ctx.createLinearGradient(x, y, x, y + height);
+            if (type === 'ord') {
+                gradient.addColorStop(0, '#D43905');
+                gradient.addColorStop(1, '#D43905');
+            } else {
+                gradient.addColorStop(0, '#fdf9f3');
+                gradient.addColorStop(1, '#fdf9f3');
+            }
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, y, width, height);
+
+            // Draw field border
+            ctx.strokeStyle = '#ffffff20';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, width, height);
+        }
+
+        // Cache for audio buffers
+        const audioBuffers = new Map();
+        // Cache for file lengths
+        let fileLengthsCache = null;
+
+        async function loadAudioBuffer(url) {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await Tone.context.decodeAudioData(arrayBuffer);
+            return audioBuffer;
+        }
+
+        async function setupPlayer(voicePath) {
+            const audioPath = `/audio/${voicePath}`;
+
+            try {
+                let buffer;
+                if (audioBuffers.has(audioPath)) {
+                    buffer = audioBuffers.get(audioPath);
+                } else {
+                    buffer = await loadAudioBuffer(audioPath);
+                    audioBuffers.set(audioPath, buffer);
+                }
+                const rev = new Tone.Reverb({wet: 0.75, decay: 5}).toDestination();
+                const player = new Tone.Player({
+                    url: ""
+                }).connect(rev);
+
+                player.buffer = buffer;
+                return player;
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        // Updated playVoices function with removed UI updates
+        async function playVoices(voices, type) {
+            if (!audioStarted) {
+                return;
+            }
+
+            // Extract file part number from first voice
+            if (voices.length > 0) {
+                const fileNumber = getFileNumberFromPath(voices[0]);
+                if (fileNumber) {
+                    currentFiles[type].part = fileNumber;
+
+                    // Get file length from cache
+                    if (!fileLengthsCache) {
+                        // Load file lengths if not already loaded
+                        fileLengthsCache = await fetchFileLengths();
+                    }
+
+                    if (fileLengthsCache && fileLengthsCache[fileNumber]) {
+                        currentFiles[type].length = fileLengthsCache[fileNumber];
+                    } else {
+                        currentFiles[type].length = 5; // Default value
+                    }
+                }
+            } else {
+                currentFiles[type].part = null;
+                currentFiles[type].length = null;
+            }
+
+            // Update active voices for this type
+            activeVoices[type] = voices;
+
+            // Update visualization
+            createStaticBars(type, voices, currentFiles[type].length);
+
+            try {
+                for (const voicePath of voices) {
+                    try {
+                        const player = await setupPlayer(voicePath);
+                        player.start();
+                    } catch (error) {
+                        console.error(`Error playing ${voicePath}:`, error);
+                    }
+                }
+            } catch (error) {
+                console.error('Tone.js error:', error);
+            }
+        }
+
+        async function pollVoices(type) {
+            try {
+                const response = await fetch(`/get_${type}`);
+                const voices = await response.json();
+
+                if (voices.length > 0) {
+                    playVoices(voices, type);
+                }
+            } catch (error) {
+                console.error(`Error polling ${type} voices:`, error);
+            }
+        }
+
+        function startPolling() {
+            setInterval(() => pollVoices('ord'), 100);
+            setInterval(() => pollVoices('krebs'), 100);
+        }
+
+        async function startAudio() {
+            try {
+                await Tone.start();
+                audioStarted = true;
+                startOverlay.style.display = 'none';
+
+                // Load file lengths if not already loaded
+                if (!fileLengthsCache) {
+                    fileLengthsCache = await fetchFileLengths();
+                }
+            } catch (error) {
+                console.error('Error starting audio:', error);
+                alert('Failed to start audio. Please try again.');
+            }
+        }
+
+        function initializeCanvas() {
+            resizeCanvas();
+            drawBars();
+
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                resizeCanvas();
+                createStaticBars('ord', activeVoices.ord, currentFiles.ord.length);
+                createStaticBars('krebs', activeVoices.krebs, currentFiles.krebs.length);
+                drawBars();
+            });
+
+            // Set up click-to-start
+            startOverlay.addEventListener('click', startAudio);
+            document.querySelector('.canvas-container').addEventListener('click', startAudio);
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Fetch server start time as early as possible
+            await fetchServerStartTime();
+
+            // Try to fetch file lengths during initialization
+            try {
+                fileLengthsCache = await fetchFileLengths();
+            } catch (error) {
+                console.error('Could not load file lengths during initialization:', error);
+            }
+
+            initializeCanvas();
+            startPolling();
+        });
+    </script>
+</body>
+</html>
