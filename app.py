@@ -53,7 +53,6 @@ ord_queue = queue.Queue()
 krebs_queue = queue.Queue()
 
 # Flask app
-
 app = Flask(__name__, static_folder="static")
 
 
@@ -127,9 +126,13 @@ def get_krebs():
 
 def process_audio(folder, abbr, output_queue):
     while True:
+        # Calculate the exact time when this segment should start
+        current_time = time.time()
+
         mute_states = generate_mutes()
         part = draw_part()
         oct = choose_oct()
+
         # Remove 'static/audio' from base path
         base_path = f"{folder}/{folder} Oct {oct}"
         under = f"{base_path}/{part} U {abbr} {oct}.mp3"
@@ -137,8 +140,16 @@ def process_audio(folder, abbr, output_queue):
         over = f"{base_path}/{part} O {abbr} {oct}.mp3"
         voices = [under, middle, over]
         active_voices = [voices[e] for e, m in enumerate(mute_states) if m > 0]
-        print(f"Putting these paths in queue for {folder}:", active_voices)
-        output_queue.put(active_voices)
+
+        # Create the response with timestamp
+        response_data = {
+            'voices': active_voices,
+            'start_time': current_time,  # Unix timestamp when this should start
+            'duration': file_lengths[f'{part}']
+        }
+
+        print(f"Putting these paths in queue for {folder}:", active_voices, f"Start time: {current_time}")
+        output_queue.put(response_data)
         time.sleep(file_lengths[f'{part}'])
 
 

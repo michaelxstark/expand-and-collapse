@@ -5,8 +5,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <link href="https://fonts.cdnfonts.com/css/din-alternate" rel="stylesheet">
     <style>
-
-
         @import url('https://fonts.cdnfonts.com/css/din-alternate');
 
         body {
@@ -20,7 +18,6 @@
             max-width: 960px;
             margin: 0 auto;
             padding: 20px;
-
         }
         .title {
           margin-top: 7.5%;
@@ -32,14 +29,13 @@
         .canvas-container {
             position: relative;
             width: 100%;
-            height: 960px; /* Increased height to accommodate both fields */
+            height: 960px;
             margin: 0 auto;
             margin-bottom: 1%;
             background-color: #fefdfb;
             border-radius: 8px;
             overflow: hidden;
             cursor: pointer;
-
         }
 
         #visualizer {
@@ -77,15 +73,13 @@
             background-color: #4b4640;
             transform: scale(1.05);
         }
-        /* Server timer styles */
+
         .server-timer {
             text-align: center;
             margin-bottom: 20px;
             margin-top: 7.5%;
             padding: 12px;
             background-color: #fefdfb;
-            /*border-radius: 8px; */
-            /*box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); */
         }
         .timer-label {
             font-size: 0.9em;
@@ -110,14 +104,11 @@
         .credits{
           text-align: center;
         }
-
-
     </style>
 </head>
 <body>
     <div class="container">
         <h1 class="title">Expand and Collapse</h1>
-
 
         <div class="canvas-container">
             <canvas id="visualizer"></canvas>
@@ -126,8 +117,6 @@
             </div>
         </div>
 
-
-        <!-- Server timer component -->
         <div class="server-timer">
             <div class="timer-label">Composition Running Time</div>
             <div id="server-timer" class="timer-value">
@@ -139,8 +128,6 @@
         Composed by <a href="https://www.lukaslauermann.net" target="_blank" style="color: rgba(0, 10, 10, 1.0); text-decoration: none;">Lukas Lauermann</a>,
         Software developed by <a href="https://michaelxstark.github.io/home/" target="_blank" style="color: rgba(0, 10, 10, 1.0); text-decoration: none;">Michael Stark</a>
         </div>
-
-
     </div>
 
     <script>
@@ -194,66 +181,70 @@
         let serverStartTime = null;
         let timerInterval = null;
 
-        // Function to fetch server start time
+        // Time synchronization variables
+        let serverTimeOffset = 0; // Difference between server time and local time
+
+        // Function to fetch server start time and calculate offset
         async function fetchServerStartTime() {
             try {
+                const requestTime = Date.now();
                 const response = await fetch('/server-start-time');
+                const responseTime = Date.now();
                 const data = await response.json();
+
                 serverStartTime = new Date(data.start_time);
 
-                // Start the timer
+                // Estimate network latency and calculate server time offset
+                const networkLatency = (responseTime - requestTime) / 2;
+                const serverTimeAtResponse = responseTime - networkLatency;
+                serverTimeOffset = serverTimeAtResponse - responseTime;
+
                 startServerTimer();
                 return serverStartTime;
             } catch (error) {
-                // If we can't get the start time, use current time as fallback
                 serverStartTime = new Date();
+                serverTimeOffset = 0;
                 startServerTimer();
                 return serverStartTime;
             }
         }
 
-        // Function to update the timer display
+        // Function to get synchronized server time
+        function getServerTime() {
+            return Date.now() + serverTimeOffset;
+        }
+
         function updateTimerDisplay() {
             if (!serverStartTime) return;
 
             const now = new Date();
             const diff = now - serverStartTime;
 
-            // Convert milliseconds to days, hours, minutes, seconds
             const days = Math.floor(diff / (1000 * 60 * 60 * 24));
             const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
             const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-            // Update the display
             document.getElementById('days').textContent = days.toString().padStart(2, '0');
             document.getElementById('hours').textContent = hours.toString().padStart(2, '0');
             document.getElementById('minutes').textContent = minutes.toString().padStart(2, '0');
             document.getElementById('seconds').textContent = seconds.toString().padStart(2, '0');
         }
 
-        // Function to start the timer
         function startServerTimer() {
-            // Clear any existing interval
             if (timerInterval) clearInterval(timerInterval);
-
-            // Update immediately
             updateTimerDisplay();
-
-            // Then update every second
             timerInterval = setInterval(updateTimerDisplay, 1000);
         }
 
-        // Function to get file number from path
         function getFileNumberFromPath(path) {
             if (!path) return null;
 
-            // Try different regex patterns to extract the file number
             const patterns = [
-                /\/(\d+)\s/,      // Matches "/12 " format
-                /\\(\d+)\s/,      // Matches "\12 " format
-                /[/\\](\d+)[UM]/, // Matches "/12U" or "\12M" format
-                /\b(\d+)\s[UMO]/  // Matches "12 U" format
+                /\/(\d+)\s/,
+                /\\(\d+)\s/,
+                /[/\\](\d+)[UM]/,
+                /\b(\d+)\s[UMO]/
             ];
 
             for (const pattern of patterns) {
@@ -262,21 +253,14 @@
                     return matches[1];
                 }
             }
-
             return null;
         }
 
         function calculateFieldDimensions() {
-            // Calculate field dimensions - make fields square
-            fieldWidth = canvasWidth * 0.5;  // 45% of canvas width
-            fieldHeight = fieldWidth;  // Square dimensions
-
-            // Position the right field (ord) in the upper right
+            fieldWidth = canvasWidth * 0.5;
+            fieldHeight = fieldWidth;
             rightFieldX = canvasWidth - fieldWidth;
             rightFieldY = 0;
-
-            // Position the left field (krebs) so its upper right corner
-            // aligns with the lower left corner of the right field
             leftFieldX = rightFieldX - fieldWidth;
             leftFieldY = rightFieldY + fieldHeight;
         }
@@ -287,112 +271,85 @@
             canvas.height = container.clientHeight;
             canvasWidth = canvas.width;
             canvasHeight = canvas.height;
-
-            // Calculate field dimensions whenever canvas is resized
             calculateFieldDimensions();
         }
 
-        // File lengths loading
         async function fetchFileLengths() {
             try {
                 const response = await fetch('/file-lengths');
                 const fileLengths = await response.json();
                 return fileLengths;
             } catch (error) {
-                // Return a default mapping with some reasonable values
                 const defaultLengths = {};
                 for (let i = 1; i <= 16; i++) {
-                    defaultLengths[i.toString()] = 5 + Math.random() * 5; // Random lengths between 5-10 seconds
+                    defaultLengths[i.toString()] = 5 + Math.random() * 5;
                 }
                 return defaultLengths;
             }
         }
 
-        // Create bars based on file lengths
         function createStaticBars(type, voices, fileLength) {
-            // Clear existing bars
             bars[type] = [];
 
             if (!voices || voices.length === 0) return;
 
-            // Calculate bar properties
             const barWidth = Math.min(30, fieldWidth / (voices.length || 1) / 2);
             const maxBarHeight = fieldHeight * 0.8;
 
-            // Get the file number from the first voice path to determine which file is playing
             const fileNumber = getFileNumberFromPath(voices[0]);
 
-            // Use the actual file length to calculate bar height if available
             let normalizedHeight;
             if (fileNumber && fileLengthsCache && fileLengthsCache[fileNumber]) {
-                // Map file length to bar height - use a reasonable range
-                // Assuming most files are between 3-15 seconds
-                const minLength = 15;  // minimum expected file length in seconds
-                const maxLength = 45; // maximum expected file length in seconds
+                const minLength = 15;
+                const maxLength = 45;
                 const lengthRange = maxLength - minLength;
-
-                // Get the actual file length
                 const actualLength = fileLengthsCache[fileNumber];
-
-                // Normalize the length to a percentage of the max height
-                // Clamp the value between 0.2 and 1.0 of max height to ensure visibility
                 const heightPercentage = Math.min(1.0, Math.max(0.2, (actualLength - minLength) / lengthRange));
                 normalizedHeight = heightPercentage * maxBarHeight;
             } else {
-                // Fallback if file length is not available
-                normalizedHeight = maxBarHeight * 0.5; // Default to 50% height
+                normalizedHeight = maxBarHeight * 0.5;
             }
 
-            // Create bars for each voice based on field position
             for (let i = 0; i < voices.length; i++) {
                 if (type === 'ord') {
-                    // Right field - bars pointing up
                     const centerX = rightFieldX + fieldWidth / 2;
                     bars[type].push({
                         height: normalizedHeight,
                         width: barWidth,
                         x: centerX - (voices.length * barWidth / 2) + (i * barWidth * 1.5),
-                        y: rightFieldY + fieldHeight, // Bottom of the field
+                        y: rightFieldY + fieldHeight,
                         direction: 'up'
                     });
                 } else {
-                    // Left field - bars pointing down
                     const centerX = leftFieldX + fieldWidth / 2;
                     bars[type].push({
                         height: normalizedHeight,
                         width: barWidth,
                         x: centerX - (voices.length * barWidth / 2) + (i * barWidth * 1.5),
-                        y: leftFieldY, // Top of the field
+                        y: leftFieldY,
                         direction: 'down'
                     });
                 }
             }
 
-            // Redraw the bars
             drawBars();
         }
 
         function drawBars() {
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-            // Draw right field (ord)
             drawField('ord', rightFieldX, rightFieldY, fieldWidth, fieldHeight);
-
-            // Draw left field (krebs)
             drawField('krebs', leftFieldX, leftFieldY, fieldWidth, fieldHeight);
 
-            // Draw a connecting line between the two fields
             ctx.beginPath();
-            ctx.moveTo(rightFieldX, rightFieldY + fieldHeight); // Lower left of right field
-            ctx.lineTo(leftFieldX + fieldWidth, leftFieldY);    // Upper right of left field
+            ctx.moveTo(rightFieldX, rightFieldY + fieldHeight);
+            ctx.lineTo(leftFieldX + fieldWidth, leftFieldY);
             ctx.strokeStyle = '#ffffff50';
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // Draw bars for each field
             ['ord', 'krebs'].forEach(type => {
                 bars[type].forEach(bar => {
-                    // Draw bar based on direction
                     const gradient = ctx.createLinearGradient(
                         bar.x,
                         bar.direction === 'up' ? bar.y : bar.y - bar.height,
@@ -407,7 +364,6 @@
                     ctx.beginPath();
 
                     if (bar.direction === 'up') {
-                        // Upward bars (ord)
                         ctx.roundRect(
                             bar.x - bar.width / 2,
                             bar.y - bar.height,
@@ -416,7 +372,6 @@
                             [4, 4, 0, 0]
                         );
                     } else {
-                        // Downward bars (krebs)
                         ctx.roundRect(
                             bar.x - bar.width / 2,
                             bar.y,
@@ -432,7 +387,6 @@
         }
 
         function drawField(type, x, y, width, height) {
-            // Draw field background
             const gradient = ctx.createLinearGradient(x, y, x, y + height);
             if (type === 'ord') {
                 gradient.addColorStop(0, '#D43905');
@@ -445,7 +399,6 @@
             ctx.fillStyle = gradient;
             ctx.fillRect(x, y, width, height);
 
-            // Draw field border
             ctx.strokeStyle = '#ffffff20';
             ctx.lineWidth = 1;
             ctx.strokeRect(x, y, width, height);
@@ -453,7 +406,6 @@
 
         // Cache for audio buffers
         const audioBuffers = new Map();
-        // Cache for file lengths
         let fileLengthsCache = null;
 
         async function loadAudioBuffer(url) {
@@ -486,8 +438,8 @@
             }
         }
 
-        // Updated playVoices function with removed UI updates
-        async function playVoices(voices, type) {
+        // Updated playVoices function with synchronized scheduling
+        async function playVoices(voices, type, startTime) {
             if (!audioStarted) {
                 return;
             }
@@ -498,16 +450,14 @@
                 if (fileNumber) {
                     currentFiles[type].part = fileNumber;
 
-                    // Get file length from cache
                     if (!fileLengthsCache) {
-                        // Load file lengths if not already loaded
                         fileLengthsCache = await fetchFileLengths();
                     }
 
                     if (fileLengthsCache && fileLengthsCache[fileNumber]) {
                         currentFiles[type].length = fileLengthsCache[fileNumber];
                     } else {
-                        currentFiles[type].length = 5; // Default value
+                        currentFiles[type].length = 5;
                     }
                 }
             } else {
@@ -515,17 +465,22 @@
                 currentFiles[type].length = null;
             }
 
-            // Update active voices for this type
             activeVoices[type] = voices;
-
-            // Update visualization
             createStaticBars(type, voices, currentFiles[type].length);
+
+            // Calculate when to start based on server timestamp
+            const currentServerTime = getServerTime() / 1000; // Convert to seconds
+            const scheduledStartTime = Math.max(startTime, currentServerTime + 0.1); // Add small buffer
+
+            // Convert to Tone.js time
+            const toneTime = Tone.now() + (scheduledStartTime - currentServerTime);
 
             try {
                 for (const voicePath of voices) {
                     try {
                         const player = await setupPlayer(voicePath);
-                        player.start();
+                        // Schedule the start at the synchronized time
+                        player.start(toneTime);
                     } catch (error) {
                         console.error(`Error playing ${voicePath}:`, error);
                     }
@@ -538,10 +493,17 @@
         async function pollVoices(type) {
             try {
                 const response = await fetch(`/get_${type}`);
-                const voices = await response.json();
+                const data = await response.json();
 
-                if (voices.length > 0) {
-                    playVoices(voices, type);
+                // Handle both old format (array) and new format (object with timestamp)
+                if (Array.isArray(data)) {
+                    // Old format - play immediately
+                    if (data.length > 0) {
+                        playVoices(data, type, Date.now() / 1000);
+                    }
+                } else if (data.voices && data.voices.length > 0) {
+                    // New format - use the provided start time
+                    playVoices(data.voices, type, data.start_time);
                 }
             } catch (error) {
                 console.error(`Error polling ${type} voices:`, error);
@@ -559,7 +521,6 @@
                 audioStarted = true;
                 startOverlay.style.display = 'none';
 
-                // Load file lengths if not already loaded
                 if (!fileLengthsCache) {
                     fileLengthsCache = await fetchFileLengths();
                 }
@@ -573,7 +534,6 @@
             resizeCanvas();
             drawBars();
 
-            // Handle window resize
             window.addEventListener('resize', () => {
                 resizeCanvas();
                 createStaticBars('ord', activeVoices.ord, currentFiles.ord.length);
@@ -581,16 +541,13 @@
                 drawBars();
             });
 
-            // Set up click-to-start
             startOverlay.addEventListener('click', startAudio);
             document.querySelector('.canvas-container').addEventListener('click', startAudio);
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // Fetch server start time as early as possible
             await fetchServerStartTime();
 
-            // Try to fetch file lengths during initialization
             try {
                 fileLengthsCache = await fetchFileLengths();
             } catch (error) {
