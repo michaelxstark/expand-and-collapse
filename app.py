@@ -48,9 +48,10 @@ global file_lengths
 file_lengths = {f'{i}': calculate_file_length(i, 'Ordinario', 'ord') for i in range(1, 17, 1)}
 
 
-# Shared queues for active voices
-ord_queue = queue.Queue()
-krebs_queue = queue.Queue()
+# Shared state for active voices (not queues!)
+current_ord_state = {'voices': [], 'start_time': 0, 'duration': 0}
+current_krebs_state = {'voices': [], 'start_time': 0, 'duration': 0}
+state_lock = threading.Lock()
 
 # Flask app
 app = Flask(__name__, static_folder="static")
@@ -110,21 +111,19 @@ def get_file_lengths():
 
 @app.route('/get_ord', methods=['GET'])
 def get_ord():
-    # Return the latest active voices for Ordinario
-    if not ord_queue.empty():
-        return jsonify(ord_queue.get())
-    return jsonify([])  # Return an empty list if no updates yet
+    # Return the current state for Ordinario (all clients get the same data)
+    with state_lock:
+        return jsonify(current_ord_state)
 
 
 @app.route('/get_krebs', methods=['GET'])
 def get_krebs():
-    # Return the latest active voices for Krebs
-    if not krebs_queue.empty():
-        return jsonify(krebs_queue.get())
-    return jsonify([])
+    # Return the current state for Krebs (all clients get the same data)
+    with state_lock:
+        return jsonify(current_krebs_state)
 
 
-def process_audio(folder, abbr, output_queue):
+def process_audio(folder, abbr, state_dict):
     while True:
         # Calculate the exact time when this segment should start
         current_time = time.time()
@@ -141,21 +140,19 @@ def process_audio(folder, abbr, output_queue):
         voices = [under, middle, over]
         active_voices = [voices[e] for e, m in enumerate(mute_states) if m > 0]
 
-        # Create the response with timestamp
-        response_data = {
-            'voices': active_voices,
-            'start_time': current_time,  # Unix timestamp when this should start
-            'duration': file_lengths[f'{part}']
-        }
+        # Update the shared state (instead of putting in queue)
+        with state_lock:
+            state_dict['voices'] = active_voices
+            state_dict['start_time'] = current_time
+            state_dict['duration'] = file_lengths[f'{part}']
 
-        print(f"Putting these paths in queue for {folder}:", active_voices, f"Start time: {current_time}")
-        output_queue.put(response_data)
+        print(f"Updated state for {folder}:", active_voices, f"Start time: {current_time}")
         time.sleep(file_lengths[f'{part}'])
 
 
 # Start threads for audio processing
-thread_ord = threading.Thread(target=process_audio, args=("Ordinario", "ord", ord_queue))
-thread_krebs = threading.Thread(target=process_audio, args=("Krebs", "Krebs", krebs_queue))
+thread_ord = threading.Thread(target=process_audio, args=("Ordinario", "ord", current_ord_state))
+thread_krebs = threading.Thread(target=process_audio, args=("Krebs", "Krebs", current_krebs_state))
 
 
 if __name__ == '__main__':

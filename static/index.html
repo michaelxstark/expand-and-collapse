@@ -184,6 +184,12 @@
         // Time synchronization variables
         let serverTimeOffset = 0; // Difference between server time and local time
 
+        // Track last played timestamps to avoid replaying
+        const lastPlayedTimes = {
+            ord: 0,
+            krebs: 0
+        };
+
         // Function to fetch server start time and calculate offset
         async function fetchServerStartTime() {
             try {
@@ -497,13 +503,24 @@
 
                 // Handle both old format (array) and new format (object with timestamp)
                 if (Array.isArray(data)) {
-                    // Old format - play immediately
+                    // Old format - play immediately (only if not empty)
                     if (data.length > 0) {
                         playVoices(data, type, Date.now() / 1000);
                     }
                 } else if (data.voices && data.voices.length > 0) {
-                    // New format - use the provided start time
-                    playVoices(data.voices, type, data.start_time);
+                    // New format - check if this is a new segment (avoid replaying)
+                    if (data.start_time > lastPlayedTimes[type]) {
+                        lastPlayedTimes[type] = data.start_time;
+                        playVoices(data.voices, type, data.start_time);
+                    }
+                } else if (data.voices && data.voices.length === 0) {
+                    // Handle case where voices array is empty (silence)
+                    if (data.start_time > lastPlayedTimes[type]) {
+                        lastPlayedTimes[type] = data.start_time;
+                        // Clear the visualization for this type
+                        activeVoices[type] = [];
+                        createStaticBars(type, [], 0);
+                    }
                 }
             } catch (error) {
                 console.error(`Error polling ${type} voices:`, error);
