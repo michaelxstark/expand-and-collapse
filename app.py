@@ -8,8 +8,8 @@ import librosa
 import datetime
 
 
-# Server start time
-server_start_time = datetime.datetime.now().isoformat()
+# Server start time in UTC
+server_start_time = datetime.datetime.utcnow().isoformat() + 'Z'
 
 
 #generate mute states for voices
@@ -59,7 +59,10 @@ app = Flask(__name__, static_folder="static")
 
 @app.route('/server-start-time')
 def get_server_start_time():
-    return jsonify({"start_time": server_start_time})
+    return jsonify({
+        "start_time": server_start_time,
+        "timezone": "UTC"
+    })
 
 
 @app.route('/check-audio/<path:filename>')
@@ -125,7 +128,7 @@ def get_krebs():
 
 def process_audio(folder, abbr, state_dict):
     while True:
-        # Calculate the exact time when this segment should start
+        # Use UTC timestamp (time.time() is already UTC-based)
         current_time = time.time()
 
         mute_states = generate_mutes()
@@ -146,7 +149,7 @@ def process_audio(folder, abbr, state_dict):
             state_dict['start_time'] = current_time
             state_dict['duration'] = file_lengths[f'{part}']
 
-        print(f"Updated state for {folder}:", active_voices, f"Start time: {current_time}")
+        print(f"Updated state for {folder}:", active_voices, f"Start time (UTC): {current_time}")
         time.sleep(file_lengths[f'{part}'])
 
 
