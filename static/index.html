@@ -31,7 +31,7 @@
             width: 100%;
             height: 960px;
             margin: 0 auto;
-            margin-bottom: 1%;
+            margin-bottom: 10%;
             background-color: #fefdfb;
             border-radius: 8px;
             overflow: hidden;
@@ -74,32 +74,7 @@
             transform: scale(1.05);
         }
 
-        .server-timer {
-            text-align: center;
-            margin-bottom: 20px;
-            margin-top: 7.5%;
-            padding: 12px;
-            background-color: #fefdfb;
-        }
-        .timer-label {
-            font-size: 0.9em;
-            color: #8a8a8a;
-            margin-bottom: 4px;
-        }
-        .timer-value {
-            font-family: 'DIN Alternate', monospace;
-            font-size: 1.4em;
-            color: #f0f0f0;
-            letter-spacing: 1px;
-        }
-        .timer-value span {
-            display: inline-block;
-            background-color: #3a3a3a;
-            padding: 2px 6px;
-            margin: 0 2px;
-            border-radius: 4px;
-            min-width: 30px;
-        }
+
 
         .credits{
           text-align: center;
@@ -133,7 +108,7 @@
                 <button class="start-button">Click to Start Audio</button>
             </div>
         </div>
-        
+
 
         <div class="sent">This piece of music began on June 6, 2025, at 6:00 PM and will play endlessly without repetition, unless interrupted by external events.</div>
 
@@ -239,28 +214,12 @@
             return Date.now() + serverTimeOffset;
         }
 
-        function updateTimerDisplay() {
-            if (!serverStartTime) return;
 
-            const now = new Date();
-            const diff = now - serverStartTime;
-
-            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
-            document.getElementById('days').textContent = days.toString().padStart(2, '0');
-            document.getElementById('hours').textContent = hours.toString().padStart(2, '0');
-            document.getElementById('minutes').textContent = minutes.toString().padStart(2, '0');
-            document.getElementById('seconds').textContent = seconds.toString().padStart(2, '0');
-        }
 
         function startServerTimer() {
             if (timerInterval) clearInterval(timerInterval);
-            updateTimerDisplay();
-            timerInterval = setInterval(updateTimerDisplay, 1000);
         }
+
 
         function getFileNumberFromPath(path) {
             if (!path) return null;
